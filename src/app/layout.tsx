@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import Providers from "@/components/Providers";
 import "./globals.css";
 
 const sans = localFont({
@@ -57,7 +58,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${sans.variable} ${mono.variable} antialiased`}>
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

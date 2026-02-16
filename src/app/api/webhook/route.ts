@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
+import { db } from "@/lib/db";
+import { provisionInstance, suspendInstance, deprovisionInstance, resumeInstance } from "@/lib/openclaw";
+import { sendWelcomeEmail, sendPaymentFailedEmail } from "@/lib/email";
 
 export async function POST(req: NextRequest) {
   const stripe = getStripe();
@@ -28,35 +31,99 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
-  // Handle the event
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
+      const userId = session.metadata?.userId;
+      const plan = session.metadata?.plan;
+      const customerId = session.customer as string | null;
+
+      if (userId) {
+        if (customerId) {
+          await db.user.update({
+            where: { id: userId },
+            data: { stripeCustomerId: customerId },
+          });
+        }
+
+        const user = await db.user.findUnique({
+          where: { id: userId },
+          include: { instance: true },
+        });
+
+        if (user) {
+          if (user.emailVerified && user.instance) {
+            await provisionInstance(userId, user.instance.plan);
+            await sendWelcomeEmail(user.email, user.instance.plan);
+          }
+
+          await db.auditLog.create({
+            data: {
+              userId,
+              action: "checkout.completed",
+              details: `Plan: ${plan}, Stripe session: ${session.id}`,
+            },
+          });
+        }
+      }
+
       console.log("Checkout completed:", session.id);
-      // TODO: Provision the user's OpenClaw instance
-      // TODO: Create user record in your database
-      // TODO: Send welcome email
       break;
     }
 
     case "customer.subscription.updated": {
       const subscription = event.data.object as Stripe.Subscription;
+      const customerId = subscription.customer as string;
+
+      const user = await db.user.findFirst({
+        where: { stripeCustomerId: customerId },
+        include: { instance: true },
+      });
+
+      if (user?.instance) {
+        if (subscription.status === "active" && user.instance.status === "suspended") {
+          await resumeInstance(user.instance.id);
+        }
+      }
+
       console.log("Subscription updated:", subscription.id);
-      // TODO: Handle plan changes
       break;
     }
 
     case "customer.subscription.deleted": {
       const subscription = event.data.object as Stripe.Subscription;
+      const customerId = subscription.customer as string;
+
+      const user = await db.user.findFirst({
+        where: { stripeCustomerId: customerId },
+        include: { instance: true },
+      });
+
+      if (user?.instance) {
+        await deprovisionInstance(user.instance.id);
+      }
+
       console.log("Subscription cancelled:", subscription.id);
-      // TODO: Deprovision user's OpenClaw instance
       break;
     }
 
     case "invoice.payment_failed": {
       const invoice = event.data.object as Stripe.Invoice;
+      const customerId = invoice.customer as string;
+
+      const user = await db.user.findFirst({
+        where: { stripeCustomerId: customerId },
+        include: { instance: true },
+      });
+
+      if (user) {
+        if (user.instance) {
+          await suspendInstance(user.instance.id);
+        }
+        await sendPaymentFailedEmail(user.email);
+      }
+
       console.log("Payment failed:", invoice.id);
-      // TODO: Notify user of failed payment
       break;
     }
 

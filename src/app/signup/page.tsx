@@ -27,20 +27,32 @@ function SignupForm() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/checkout", {
+      // Step 1: Create account
+      const signupRes = await fetch("/api/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, plan }),
+        body: JSON.stringify({ email, password, plan }),
       });
 
-      const data = await res.json();
+      const signupData = await signupRes.json();
+      if (!signupRes.ok) {
+        throw new Error(signupData.error || "Failed to create account");
+      }
 
-      if (!res.ok) {
-        throw new Error(data.error || "Something went wrong");
+      // Step 2: Create Stripe checkout session
+      const checkoutRes = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, plan, userId: signupData.userId }),
+      });
+
+      const checkoutData = await checkoutRes.json();
+      if (!checkoutRes.ok) {
+        throw new Error(checkoutData.error || "Failed to create checkout");
       }
 
       // Redirect to Stripe Checkout
-      window.location.href = data.url;
+      window.location.href = checkoutData.url;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
       setLoading(false);
@@ -72,11 +84,8 @@ function SignupForm() {
         )}
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-6">
-          {/* Plan selector */}
           <div>
-            <label className="mb-2 block text-sm font-medium">
-              Select your plan
-            </label>
+            <label className="mb-2 block text-sm font-medium">Select your plan</label>
             <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
@@ -100,18 +109,13 @@ function SignupForm() {
                 }`}
               >
                 <div className="text-sm font-semibold">Managed AI</div>
-                <div className="mt-1 text-xs text-gray-500">
-                  $49/mo + usage
-                </div>
+                <div className="mt-1 text-xs text-gray-500">$49/mo + usage</div>
               </button>
             </div>
           </div>
 
-          {/* Email */}
           <div>
-            <label htmlFor="email" className="mb-2 block text-sm font-medium">
-              Email address
-            </label>
+            <label htmlFor="email" className="mb-2 block text-sm font-medium">Email address</label>
             <input
               id="email"
               type="email"
@@ -123,14 +127,8 @@ function SignupForm() {
             />
           </div>
 
-          {/* Password */}
           <div>
-            <label
-              htmlFor="password"
-              className="mb-2 block text-sm font-medium"
-            >
-              Password
-            </label>
+            <label htmlFor="password" className="mb-2 block text-sm font-medium">Password</label>
             <input
               id="password"
               type="password"
@@ -148,8 +146,13 @@ function SignupForm() {
             disabled={loading}
             className="w-full rounded-lg bg-brand-600 py-3 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {loading ? "Redirecting to checkout..." : "Continue to Payment"}
+            {loading ? "Creating account..." : "Continue to Payment"}
           </button>
+
+          <p className="text-center text-xs text-gray-500">
+            Already have an account?{" "}
+            <Link href="/login" className="font-medium text-brand-600 hover:text-brand-700">Sign in</Link>
+          </p>
 
           <p className="text-center text-xs text-gray-500">
             By signing up, you agree to our{" "}

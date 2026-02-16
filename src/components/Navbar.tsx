@@ -25,6 +25,12 @@ export default function Navbar() {
             FAQ
           </a>
           <Link
+            href="/login"
+            className="text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+          >
+            Sign In
+          </Link>
+          <Link
             href="/signup"
             className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-700"
           >
@@ -55,6 +61,7 @@ export default function Navbar() {
             <a href="#features" onClick={() => setMobileOpen(false)} className="text-sm text-gray-600 dark:text-gray-400">Features</a>
             <a href="#pricing" onClick={() => setMobileOpen(false)} className="text-sm text-gray-600 dark:text-gray-400">Pricing</a>
             <a href="#faq" onClick={() => setMobileOpen(false)} className="text-sm text-gray-600 dark:text-gray-400">FAQ</a>
+            <Link href="/login" onClick={() => setMobileOpen(false)} className="text-sm text-gray-600 dark:text-gray-400">Sign In</Link>
             <Link
               href="/signup"
               className="rounded-lg bg-brand-600 px-4 py-2 text-center text-sm font-medium text-white"

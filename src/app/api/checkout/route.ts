@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
+import { db } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, plan } = await req.json();
+    const { email, plan, userId } = await req.json();
 
     if (!email || !plan) {
       return NextResponse.json(
@@ -16,7 +17,6 @@ export async function POST(req: NextRequest) {
     const stripe = getStripe();
     const appUrl = process.env.APP_URL || "http://localhost:3000";
 
-    // Build line items based on plan
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
 
     if (plan === "byok") {
@@ -25,12 +25,10 @@ export async function POST(req: NextRequest) {
         quantity: 1,
       });
     } else if (plan === "managed") {
-      // Base subscription price
       lineItems.push({
         price: process.env.STRIPE_MANAGED_BASE_PRICE_ID!,
         quantity: 1,
       });
-      // Metered usage component
       lineItems.push({
         price: process.env.STRIPE_MANAGED_METERED_PRICE_ID!,
       });
@@ -42,12 +40,20 @@ export async function POST(req: NextRequest) {
       mode: "subscription",
       customer_email: email,
       line_items: lineItems,
-      success_url: `${appUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${appUrl}/verify-email/pending`,
       cancel_url: `${appUrl}/signup?plan=${plan}`,
       metadata: {
         plan,
+        userId: userId || "",
       },
     });
+
+    if (userId && session.customer) {
+      await db.user.update({
+        where: { id: userId },
+        data: { stripeCustomerId: session.customer as string },
+      });
+    }
 
     return NextResponse.json({ url: session.url });
   } catch (err) {
